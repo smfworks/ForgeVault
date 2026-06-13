@@ -1,0 +1,11 @@
+.vs/
+*.user
+*.suo
+bin/
+obj/
+publish/
+*.log
+.vscode/
+.idea/
+*.db
+*.db-journal
