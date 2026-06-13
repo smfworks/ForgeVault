@@ -26,10 +26,13 @@ Early development — MVP targeting Windows with .NET 8 WPF.
 
 Requires:
 - Windows 10/11 x64
-- .NET 8 SDK
-- Ollama installed locally
 
-Build:
+Install:
+1. Download `ForgeVault-Setup-0.1.0.exe` from the latest release.
+2. Run the installer and follow the prompts.
+3. Launch ForgeVault from the Start Menu or desktop shortcut.
+
+Build from source:
 ```bash
 dotnet build src/ForgeVault.sln
 ```
@@ -38,6 +41,16 @@ Run:
 ```bash
 dotnet run --project src/ForgeVault/ForgeVault.csproj
 ```
+
+## MCP Server
+
+ForgeVault exposes a Model Context Protocol server for OpenClaw integration:
+
+```bash
+ForgeVault.exe --mcp "C:\path\to\vault"
+```
+
+See [docs/MCP.md](docs/MCP.md) for configuration.
 
 ## License
 
