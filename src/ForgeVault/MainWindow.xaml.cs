@@ -113,7 +113,7 @@ public partial class MainWindow : Window
         };
     }
 
-    private static IReadOnlyList<string> ExtractWikiLinks(string content)
+    public static IReadOnlyList<string> ExtractWikiLinks(string content)
     {
         var matches = Regex.Matches(content, @"\[\[([^\]]+)\]\]");
         return matches.Select(m => m.Groups[1].Value).ToList();
