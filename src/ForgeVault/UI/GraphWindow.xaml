@@ -1,0 +1,11 @@
+<Window x:Class="ForgeVault.GraphWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Graph" Height="600" Width="800"
+        WindowStartupLocation="CenterOwner">
+    <Grid>
+        <Border Background="#1E1E1E">
+            <Image x:Name="GraphImage" Stretch="Uniform" />
+        </Border>
+    </Grid>
+</Window>

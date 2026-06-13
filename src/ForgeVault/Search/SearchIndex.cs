@@ -22,6 +22,10 @@ public sealed class SearchIndex : IDisposable
 
     private void Initialize()
     {
+        using var pragma = _connection.CreateCommand();
+        pragma.CommandText = "PRAGMA journal_mode = DELETE;";
+        pragma.ExecuteNonQuery();
+
         using var command = _connection.CreateCommand();
         command.CommandText = @"
             CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
@@ -36,15 +40,17 @@ public sealed class SearchIndex : IDisposable
 
     public void IndexDocument(string filePath, string title, string content)
     {
-        using var command = _connection.CreateCommand();
-        command.CommandText = @"
-            INSERT INTO notes_fts (file_path, title, content) VALUES ($path, $title, $content)
-            ON CONFLICT(file_path) DO UPDATE SET title=$title, content=$content;
-        ";
-        command.Parameters.AddWithValue("$path", filePath);
-        command.Parameters.AddWithValue("$title", title);
-        command.Parameters.AddWithValue("$content", content);
-        command.ExecuteNonQuery();
+        using var deleteCommand = _connection.CreateCommand();
+        deleteCommand.CommandText = "DELETE FROM notes_fts WHERE file_path = $path;";
+        deleteCommand.Parameters.AddWithValue("$path", filePath);
+        deleteCommand.ExecuteNonQuery();
+
+        using var insertCommand = _connection.CreateCommand();
+        insertCommand.CommandText = "INSERT INTO notes_fts (file_path, title, content) VALUES ($path, $title, $content);";
+        insertCommand.Parameters.AddWithValue("$path", filePath);
+        insertCommand.Parameters.AddWithValue("$title", title);
+        insertCommand.Parameters.AddWithValue("$content", content);
+        insertCommand.ExecuteNonQuery();
     }
 
     public IEnumerable<SearchResult> Search(string query)
