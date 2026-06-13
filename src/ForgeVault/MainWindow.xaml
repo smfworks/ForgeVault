@@ -6,7 +6,14 @@
         mc:Ignorable="d"
         Title="ForgeVault" Height="800" Width="1200"
         WindowStartupLocation="CenterScreen"
-        Closing="Window_Closing">
+        Closing="Window_Closing"
+        PreviewKeyDown="Window_PreviewKeyDown">
+    <Window.Resources>
+        <Style TargetType="Button">
+            <Setter Property="Margin" Value="2" />
+        </Style>
+    </Window.Resources>
+
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -19,8 +26,9 @@
         <ToolBarTray Grid.Row="0" IsLocked="True">
             <ToolBar>
                 <Button x:Name="OpenVaultButton" Content="Open Vault" Click="OpenVaultButton_Click" />
-                <Button x:Name="NewNoteButton" Content="New Note" Click="NewNoteButton_Click" />
-                <Button x:Name="SaveButton" Content="Save" Click="SaveButton_Click" />
+                <Button x:Name="NewNoteButton" Content="New Note" Click="NewNoteButton_Click" IsEnabled="False" />
+                <Button x:Name="DailyNoteButton" Content="Daily Note" Click="DailyNoteButton_Click" IsEnabled="False" />
+                <Button x:Name="SaveButton" Content="Save" Click="SaveButton_Click" IsEnabled="False" />
                 <Button x:Name="GraphButton" Content="Graph" Click="GraphButton_Click" />
                 <Button x:Name="AiChatButton" Content="AI Chat" Click="AiChatButton_Click" />
             </ToolBar>
@@ -34,8 +42,8 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <TextBlock Grid.Column="0" Text="Vault" VerticalAlignment="Center" Margin="4,0" />
-            <TextBox x:Name="SearchBox" Grid.Column="1" KeyDown="SearchBox_KeyDown" />
-            <Button x:Name="SearchButton" Grid.Column="2" Content="Search" Click="SearchButton_Click" />
+            <TextBox x:Name="SearchBox" Grid.Column="1" KeyDown="SearchBox_KeyDown" TextChanged="SearchBox_TextChanged" />
+            <Button x:Name="SearchButton" Grid.Column="2" Content="Search" Click="SearchButton_Click" IsEnabled="False" />
         </Grid>
 
         <!-- Main content: file tree + editor -->
@@ -52,7 +60,7 @@
 
             <GridSplitter Grid.Column="1" HorizontalAlignment="Stretch" />
 
-            <TextBox x:Name="Editor" Grid.Column="2" AcceptsReturn="True" TextWrapping="Wrap" FontFamily="Consolas" FontSize="14" VerticalScrollBarVisibility="Auto" TextChanged="Editor_TextChanged" />
+            <TextBox x:Name="Editor" Grid.Column="2" AcceptsReturn="True" TextWrapping="Wrap" FontFamily="Consolas" FontSize="14" VerticalScrollBarVisibility="Auto" TextChanged="Editor_TextChanged" IsEnabled="False" />
 
             <GridSplitter Grid.Column="3" HorizontalAlignment="Stretch" />
 

@@ -5,12 +5,11 @@ using ForgeVault.Search;
 using Markdig;
 using Microsoft.Win32;
 using System.Collections.ObjectModel;
-using System.Diagnostics;
 using System.IO;
-using System.Text;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 
 namespace ForgeVault;
 
@@ -23,24 +22,64 @@ public partial class MainWindow : Window
     private readonly Dictionary<string, NoteModel> _notes = new(StringComparer.OrdinalIgnoreCase);
     private readonly ObservableCollection<TreeViewItem> _treeItems = new();
     private bool _isDirty;
+    private readonly string _settingsPath;
 
     public MainWindow()
     {
         InitializeComponent();
+        DataContext = this;
         VaultTree.ItemsSource = _treeItems;
         _ollamaClient = new OllamaClient();
+        _settingsPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ForgeVault", "settings.json");
+
+        UpdateToolbarState();
+        Loaded += MainWindow_Loaded;
+    }
+
+    private void SearchBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        UpdateToolbarState();
+    }
+
+    private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (Keyboard.Modifiers == ModifierKeys.Control)
+        {
+            switch (e.Key)
+            {
+                case Key.S:
+                    e.Handled = true;
+                    SaveCurrentNote();
+                    break;
+                case Key.N:
+                    e.Handled = true;
+                    CreateNewNote();
+                    break;
+                case Key.F:
+                    e.Handled = true;
+                    SearchBox.Focus();
+                    SearchBox.SelectAll();
+                    break;
+            }
+        }
+    }
+
+    private void MainWindow_Loaded(object sender, RoutedEventArgs e)
+    {
+        var lastVault = LoadSetting("lastVault");
+        if (!string.IsNullOrEmpty(lastVault) && Directory.Exists(lastVault))
+        {
+            OpenVault(lastVault);
+        }
     }
 
     private void OpenVaultButton_Click(object sender, RoutedEventArgs e)
     {
-        var dialog = new OpenFolderDialog
-        {
-            Title = "Select Vault Folder"
-        };
-
+        var dialog = new OpenFolderDialog { Title = "Select Vault Folder" };
         if (dialog.ShowDialog() == true)
         {
             OpenVault(dialog.FolderName);
+            SaveSetting("lastVault", dialog.FolderName);
         }
     }
 
@@ -70,7 +109,10 @@ public partial class MainWindow : Window
         }
 
         ResolveBacklinks();
+        Title = $"ForgeVault - {path}";
         StatusText.Text = $"Vault: {path} — {_notes.Count} notes";
+        Editor.IsEnabled = true;
+        UpdateToolbarState();
     }
 
     private NoteModel ParseNote(string filePath)
@@ -89,9 +131,7 @@ public partial class MainWindow : Window
                 {
                     var colon = line.IndexOf(':');
                     if (colon > 0)
-                    {
                         frontmatter[line[..colon].Trim()] = line[(colon + 1)..].Trim();
-                    }
                 }
                 content = content[(end + 3)..].TrimStart();
             }
@@ -100,15 +140,13 @@ public partial class MainWindow : Window
         if (frontmatter.TryGetValue("title", out var fmTitle))
             title = fmTitle;
 
-        var links = ExtractWikiLinks(content);
-
         return new NoteModel
         {
             FilePath = filePath,
             Title = title,
             Content = content,
             Frontmatter = frontmatter,
-            OutgoingLinks = links,
+            OutgoingLinks = ExtractWikiLinks(content),
             LastModifiedUtc = File.GetLastWriteTimeUtc(filePath)
         };
     }
@@ -185,6 +223,7 @@ public partial class MainWindow : Window
             _isDirty = false;
             RenderPreview();
             StatusText.Text = $"Editing: {note.Title}";
+            UpdateToolbarState();
         }
     }
 
@@ -192,6 +231,7 @@ public partial class MainWindow : Window
     {
         _isDirty = true;
         RenderPreview();
+        UpdateToolbarState();
     }
 
     private void RenderPreview()
@@ -204,12 +244,16 @@ public partial class MainWindow : Window
 <meta charset='utf-8'>
 <style>
 body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; line-height: 1.6; padding: 20px; background: #1E1E1E; color: #D4D4D4; }}
-a {{ color: #4EC9B0; }}
-code {{ background: #333; padding: 2px 4px; border-radius: 3px; }}
+a {{ color: #4EC9B0; text-decoration: none; }}
+a:hover {{ text-decoration: underline; }}
+code {{ background: #333; padding: 2px 4px; border-radius: 3px; font-family: Consolas, monospace; }}
 pre {{ background: #333; padding: 10px; border-radius: 5px; overflow-x: auto; }}
+pre code {{ background: transparent; padding: 0; }}
 blockquote {{ border-left: 4px solid #007ACC; margin-left: 0; padding-left: 16px; color: #AAA; }}
-table {{ border-collapse: collapse; }}
+table {{ border-collapse: collapse; width: 100%; }}
 th, td {{ border: 1px solid #444; padding: 6px; }}
+th {{ background: #2A2A2A; }}
+img {{ max-width: 100%; }}
 </style>
 </head>
 <body>{html}</body>
@@ -233,9 +277,15 @@ th, td {{ border: 1px solid #444; padding: 6px; }}
         ResolveBacklinks();
         _isDirty = false;
         StatusText.Text = $"Saved: {_currentNote.Title}";
+        UpdateToolbarState();
     }
 
     private void NewNoteButton_Click(object sender, RoutedEventArgs e)
+    {
+        CreateNewNote();
+    }
+
+    private void CreateNewNote()
     {
         if (_vaultEngine == null)
         {
@@ -246,16 +296,55 @@ th, td {{ border: 1px solid #444; padding: 6px; }}
         var dialog = new InputDialog("New Note", "Enter note title:") { Owner = this };
         if (dialog.ShowDialog() != true || string.IsNullOrWhiteSpace(dialog.ResponseText)) return;
 
-        var safeName = string.Join("_", dialog.ResponseText.Split(Path.GetInvalidFileNameChars()));
-        var filePath = Path.Combine(_vaultEngine.VaultPath, $"{safeName}.md");
-        File.WriteAllText(filePath, $"---\ntitle: {dialog.ResponseText}\n---\n\n");
+        CreateNoteFile(dialog.ResponseText);
+    }
+
+    private void DailyNoteButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_vaultEngine == null)
+        {
+            MessageBox.Show("Open a vault first.");
+            return;
+        }
+
+        var date = DateTime.Now.ToString("yyyy-MM-dd");
+        var title = $"Daily Note {date}";
+        var fileName = $"Daily/{date}.md";
+        var filePath = Path.Combine(_vaultEngine.VaultPath, fileName);
+
+        if (!File.Exists(filePath))
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(filePath)!);
+            File.WriteAllText(filePath, $"---\ntitle: {title}\ndate: {date}\n---\n\n# {title}\n\n");
+        }
+
         var note = ParseNote(filePath);
         _notes[filePath] = note;
         _searchIndex?.IndexDocument(filePath, note.Title, note.Content);
+        RefreshTree();
+        LoadNote(filePath);
+    }
+
+    private void CreateNoteFile(string title)
+    {
+        if (_vaultEngine == null) return;
+
+        var safeName = string.Join("_", title.Split(Path.GetInvalidFileNameChars()));
+        var filePath = Path.Combine(_vaultEngine.VaultPath, $"{safeName}.md");
+        File.WriteAllText(filePath, $"---\ntitle: {title}\n---\n\n");
+        var note = ParseNote(filePath);
+        _notes[filePath] = note;
+        _searchIndex?.IndexDocument(filePath, note.Title, note.Content);
+        RefreshTree();
+        LoadNote(filePath);
+    }
+
+    private void RefreshTree()
+    {
+        if (_vaultEngine == null || _treeItems.Count == 0) return;
         _treeItems[0].Items.Clear();
         foreach (var file in _notes.Keys.OrderBy(x => x))
             AddFileToTree(_treeItems[0], file, _vaultEngine.VaultPath);
-        LoadNote(filePath);
     }
 
     private void GraphButton_Click(object sender, RoutedEventArgs e)
@@ -283,7 +372,7 @@ th, td {{ border: 1px solid #444; padding: 6px; }}
 
     private void SearchBox_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
-        if (e.Key == System.Windows.Input.Key.Enter)
+        if (e.Key == Key.Enter)
             Search();
     }
 
@@ -297,6 +386,14 @@ th, td {{ border: 1px solid #444; padding: 6px; }}
         resultWindow.Show();
     }
 
+    private void UpdateToolbarState()
+    {
+        SaveButton.IsEnabled = _isDirty && _currentNote != null;
+        NewNoteButton.IsEnabled = _vaultEngine != null;
+        DailyNoteButton.IsEnabled = _vaultEngine != null;
+        SearchButton.IsEnabled = _searchIndex != null && !string.IsNullOrWhiteSpace(SearchBox.Text);
+    }
+
     private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
     {
         if (_isDirty)
@@ -307,5 +404,40 @@ th, td {{ border: 1px solid #444; padding: 6px; }}
         }
         _searchIndex?.Dispose();
         _ollamaClient?.Dispose();
+    }
+
+    private string? LoadSetting(string key)
+    {
+        try
+        {
+            if (!File.Exists(_settingsPath)) return null;
+            var json = File.ReadAllText(_settingsPath);
+            var dict = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(json);
+            return dict != null && dict.TryGetValue(key, out var value) ? value : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private void SaveSetting(string key, string value)
+    {
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(_settingsPath)!);
+            var dict = new Dictionary<string, string>();
+            if (File.Exists(_settingsPath))
+            {
+                var json = File.ReadAllText(_settingsPath);
+                dict = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(json) ?? dict;
+            }
+            dict[key] = value;
+            File.WriteAllText(_settingsPath, System.Text.Json.JsonSerializer.Serialize(dict));
+        }
+        catch
+        {
+            // Settings are best-effort
+        }
     }
 }
